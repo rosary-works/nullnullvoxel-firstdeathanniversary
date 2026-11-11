@@ -250,6 +250,7 @@ void main(){
   float prox = 0.;
   for(int i=0;i<6;i++){ if(i>=uHN) break; float Rd=uHole[i].z; prox = max(prox, exp(-max(rr[i],0.)/(Rd*1.2))); hh += 0.25*exp(-max(rr[i],0.)/(Rd*1.6)); }
   hh = mix(hh, -0.25, mask);
+  if(isnan(hh) || isinf(hh)) hh = 0.5;                                  // Windows/D3D: never let a bad value through
   o = vec4(hh, mix(length(r)*0.9 + q.x*0.6, q.x*1.6 + r.y*0.9, step(0.5, 4.0-uOct)), mask, prox*(1.0-mask));
 }`;
 
@@ -417,7 +418,8 @@ void main(){
   col = mix(col/(1.0+col*0.35), col/(1.0+col*0.12), uMode);
   col = pow(max(max(col,0.),vec3(0.0)),vec3(0.95));
   col += (hash(gl_FragCoord.xy + fract(uTime*7.1)*137.) - 0.5) * uGrain * 0.12 * (1.0-smoothstep(0.0,0.8,uDark));
-  o = vec4(col,1.);
+  if(any(isnan(col)) || any(isinf(col))) col = vec3(0.0);
+  o = vec4(clamp(col,0.0,1.0),1.);
 }`;
 
 // Pass 3: mirror voxel (square mirror panel, concave mirror funnel, round screen in the middle)
@@ -458,14 +460,15 @@ float ribbonA(vec2 u, float pb, float px, out vec3 rc){
   for(int side=0; side<2; side++){
     float sx = side==0 ? -1.0 : 1.0;
     vec2 q = vec2(u.x*sx, u.y);
-    vec2 p0 = vec2(0.02, 0.98), p1 = vec2(-1.18, 0.12 - sw*(side==0?1.0:-1.0));   // passes beyond the frame
+    vec2 p0 = vec2(0.02, 0.98), p1 = vec2(-1.18, 0.12 - sw*(side==0?1.0:-1.0));   // runs down to the outer side of the frame
+    p1 = p0 + (p1-p0)*1.4;                                               // (extended; the end is cut off below)
     vec2 dir = normalize(p1-p0), nrm = vec2(-dir.y, dir.x);
     float along = dot(q-p0, dir), L = length(p1-p0);
     float across = dot(q-p0, nrm);
     float wdt = (0.135 + 0.01*along)*0.75;                                 // gets a little wider as it falls (75% width)
     float wv = 0.006*sin(along*5.0 + uTime*0.8 + float(side));
     float t = (across - wv)/wdt;
-    float a = smoothstep(px, -px, abs(across-wv) - wdt) * smoothstep(-px, px, along) * smoothstep(px, -px, along - L);
+    float a = smoothstep(px, -px, abs(across-wv) - wdt) * smoothstep(-px, px, along) * smoothstep(-px, px, q.x + 1.21);   // end cut straight down, flush with the frame's outer side
     if(a > 0.0){
       float lining = smoothstep(0.8, 0.88, t);                            // the grey-white underside shows along the lower edge
       float sheen = pow(max(max(0.0, 1.0 - abs(t*0.9 - 0.3 - 0.15*sin(along*3.0+uTime*0.6))),0.0),4.0);
@@ -522,7 +525,7 @@ float frontFish(vec2 P, out vec3 nw, out float sAlong){
   return a*uFfB.z;
 }
 float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
-vec3 vid(vec2 q){ float m=min(uRes.x,uRes.y); return texture(uC, 0.5 + q*0.5*vec2(m/uRes.x, m/uRes.y)).rgb; }
+vec3 vid(vec2 q){ float m=min(uRes.x,uRes.y); vec3 c = texture(uC, 0.5 + q*0.5*vec2(m/uRes.x, m/uRes.y)).rgb; return any(isnan(c)) ? vec3(0.0) : c; }
 // the room in front of the voxel, as seen in the mirror (bright ceiling, columns, people, floor)
 vec3 room(vec2 v){
   float x=v.x, y=v.y;
@@ -615,7 +618,9 @@ void main(){
     vec3 bowlC = mix(bowlRoom, refl*1.15 + bowlRoom*0.15, vidAmt);
     bowlC += rim*exp(-tl*2.5)*0.5;
     bowlC *= 0.82 + 0.25*sin(tb*3.14159);
-    col = mix(flatC, bowlC, inBowl);
+    if(any(isnan(flatC)) || any(isinf(flatC))) flatC = vec3(0.8);           // Windows/D3D: a bad value in one part must not blacken the other
+    if(any(isnan(bowlC)) || any(isinf(bowlC))) bowlC = flatC;
+    col = inBowl <= 0.0 ? flatC : (inBowl >= 1.0 ? bowlC : mix(flatC, bowlC, inBowl));
     col += vec3(0.0)*exp(-sq((rhoB-rb)/0.035));                    // soft highlight where bowl meets panel
     col *= 0.9 + 0.18*h3;
     col += uCamMix*vec3(0.10)*pow(max(max(0.0, 1.0-abs(segf-0.5)*2.0),0.0),6.0)*(1.0-inBowl);   // glossy sheen down the middle of each panel
@@ -759,7 +764,8 @@ void main(){
       outc = mix(outc, silver, fa);
     }
   }
-  o = vec4(outc, 1.0);
+  if(any(isnan(outc)) || any(isinf(outc))) outc = vec3(0.75);
+  o = vec4(clamp(outc,0.0,1.0), 1.0);
 }`;
 
 // ---------------------------------------------------------------- palettes
