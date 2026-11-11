@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ヌルヌル">
-<title>ヌルヌルの鼓動</title>
+<meta name="apple-mobile-web-app-title" content="ﾇﾙﾇﾙの鼓動遺影">
+<title>ﾇﾙﾇﾙの鼓動遺影</title>
 <style>
   :root { --fg:#ecebe8; --dim:#8d8c93; --glass:rgba(12,12,16,.66); --line:rgba(255,255,255,.09); --acc:#ffb35c; --rec:#ff5a5a; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -197,6 +197,7 @@ void main(){ vUv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.,1.); }`;
 // Pass 1: height field (R = height, G = auxiliary flow value)
 const FS_H = `#version 300 es
 precision highp float;
+float sq(float x){ return x*x; }
 in vec2 vUv; out vec4 o;
 uniform vec2 uRes; uniform float uTime, uBoil, uFlow, uScale, uWarp, uFine, uRidge, uCell;
 uniform vec2 uSeed; uniform vec4 uV[8]; uniform int uVN;
@@ -231,7 +232,7 @@ void main(){
     P += (d0/r0)*(rs-r0); }
   // then the film twists around each eye
   for(int i=0;i<6;i++){ if(i>=uHN) break; vec4 hv=uHole[i]; float Rd=hv.z; float r0=length(P0-hv.xy);
-    float a = hv.w*1.6*pow(Rd/max(r0,Rd), 1.3);
+    float a = hv.w*1.6*pow(max(Rd/max(r0,Rd),0.0),1.3);
     vec2 d=P-hv.xy; float c=cos(a), s=sin(a); P = hv.xy + mat2(c,s,-s,c)*d; }
   for(int i=0;i<8;i++){ if(i>=uVN) break; vec4 v=uV[i]; vec2 d=P-v.xy; float a=v.z*exp(-dot(d,d)/(v.w*v.w));
     float c=cos(a), s=sin(a); P = v.xy + mat2(c,s,-s,c)*d; }
@@ -241,7 +242,7 @@ void main(){
   vec2 r = vec2(fbm(vec3(p + 3.0*q + vec2(1.7,9.2) + t*uFlow*0.025, b*0.7)),
                 fbm(vec3(p + 3.0*q + vec2(8.3,2.8) - t*uFlow*0.02, b*0.7+7.)));
   float h = fbm(vec3(p + uWarp*r, b*0.5+11.))*0.75 + 0.5;
-  float ridge = pow(clamp(1.0-abs(2.0*h-1.0),0.,1.), uFine);
+  float ridge = pow(max(clamp(1.0-abs(2.0*h-1.0),0.,1.),0.0),uFine);
   float hh = mix(h, ridge, uRidge);
   if(uCell>0.001){ float e = vedge((p + 0.8*r)*2.2, t*0.15*uFlow); hh += uCell*0.35*(smoothstep(0.0,0.14,e)-1.0); }
   for(int i=0;i<6;i++){ if(i>=uHN) break; float x=rr[i]; float Rd=uHole[i].z;
@@ -255,6 +256,7 @@ void main(){
 // Pass 2: lighting
 const FS_S = `#version 300 es
 precision highp float;
+float sq(float x){ return x*x; }
 in vec2 vUv; out vec4 o;
 uniform sampler2D uH; uniform vec2 uRes; uniform float uTime, uLt;
 uniform float uSpark, uAsp, uMode, uBands;
@@ -309,7 +311,7 @@ float sparkles(vec2 uv, float t){
       if(h.x < 0.3) continue;
       vec2 pos = g + 0.5 + 0.38*vec2(sin(t*0.21+h.y*6.28), cos(t*0.17+h.x*6.28));
       vec2 d = (f-pos)/sc*9.0; float d2=dot(d,d);
-      float tw = pow(0.5+0.5*sin(t*(0.8+h.y*1.6)+h.x*40.), 3.0);
+      float tw = pow(max(0.5+0.5*sin(t*(0.8+h.y*1.6)+h.x*40.),0.0),3.0);
       acc += (0.35+0.65*tw)*(exp(-d2*380.)*2.0 + exp(-d2*45.)*0.45) * (L==0?1.0:0.6);
     }
   }
@@ -334,8 +336,8 @@ void main(){
   float h = hs.r, aux = hs.g;
   float diff = max(dot(n,L),0.);
   vec3 H = normalize(L+V);
-  float sp = pow(max(dot(n,H),0.), uShin);
-  float fres = pow(1.0-max(n.z,0.), 2.5);
+  float sp = pow(max(max(dot(n,H),0.),0.0),uShin);
+  float fres = pow(max(1.0-max(n.z,0.),0.0),2.5);
   vec3 R = reflect(-V, n);
   vec3 pig = pal(h*0.85 + aux*0.35);
   float film = h*1.6 + n.z*2.0 + aux*0.8;
@@ -409,11 +411,11 @@ void main(){
     float sh = fishAlpha(Pf + vec2(0.006,-0.008), fn2)*0.35;                    // a faint shadow just below
     col *= 1.0 - sh;
     float ln = length(fn); vec3 nn = fn/max(ln,1e-4);
-    float spec = pow(max(0.0, dot(nn, normalize(vec3(-0.35,0.5,1.0)))), 30.0)*ln;
-    vec3 blk = vec3(0.012) + pal(0.5)*0.12*pow(1.0-nn.z, 2.0) + vec3(0.5,0.55,0.6)*spec*0.5;   // dark, but still a rounded 3D body
+    float spec = pow(max(max(0.0, dot(nn, normalize(vec3(-0.35,0.5,1.0)))),0.0),30.0)*ln;
+    vec3 blk = vec3(0.012) + pal(0.5)*0.12*sq(1.0-nn.z) + vec3(0.5,0.55,0.6)*spec*0.5;   // dark, but still a rounded 3D body
     col = mix(col, blk, fa); }
   col = mix(col/(1.0+col*0.35), col/(1.0+col*0.12), uMode);
-  col = pow(max(col,0.), vec3(0.95));
+  col = pow(max(max(col,0.),vec3(0.0)),vec3(0.95));
   col += (hash(gl_FragCoord.xy + fract(uTime*7.1)*137.) - 0.5) * uGrain * 0.12 * (1.0-smoothstep(0.0,0.8,uDark));
   o = vec4(col,1.);
 }`;
@@ -421,6 +423,7 @@ void main(){
 // Pass 3: mirror voxel (square mirror panel, concave mirror funnel, round screen in the middle)
 const FS_V = `#version 300 es
 precision highp float;
+float sq(float x){ return x*x; }
 in vec2 vUv; out vec4 o;
 uniform sampler2D uC; uniform vec2 uRes; uniform float uAmt, uTime, uPop, uPulse; uniform float uRib, uRibOn;
 uniform sampler2D uCam; uniform float uCamMix, uCamAsp, uMelt, uCryst, uCamFront;
@@ -459,13 +462,13 @@ float ribbonA(vec2 u, float pb, float px, out vec3 rc){
     vec2 dir = normalize(p1-p0), nrm = vec2(-dir.y, dir.x);
     float along = dot(q-p0, dir), L = length(p1-p0);
     float across = dot(q-p0, nrm);
-    float wdt = 0.135 + 0.01*along;                                        // gets a little wider as it falls
+    float wdt = (0.135 + 0.01*along)*0.75;                                 // gets a little wider as it falls (75% width)
     float wv = 0.006*sin(along*5.0 + uTime*0.8 + float(side));
     float t = (across - wv)/wdt;
     float a = smoothstep(px, -px, abs(across-wv) - wdt) * smoothstep(-px, px, along) * smoothstep(px, -px, along - L);
     if(a > 0.0){
       float lining = smoothstep(0.8, 0.88, t);                            // the grey-white underside shows along the lower edge
-      float sheen = pow(max(0.0, 1.0 - abs(t*0.9 - 0.3 - 0.15*sin(along*3.0+uTime*0.6))), 4.0);
+      float sheen = pow(max(max(0.0, 1.0 - abs(t*0.9 - 0.3 - 0.15*sin(along*3.0+uTime*0.6))),0.0),4.0);
       vec3 satin = vec3(0.015) + vec3(0.22,0.22,0.24)*sheen*(0.6+0.4*sin(along*7.0+1.0)) + vec3(0.04)*(1.0-abs(t));
       satin = mix(satin, vec3(0.78,0.79,0.82)*(0.75+0.25*sin(along*4.0)), lining);
       rc = mix(rc, satin, a); ra = max(ra, a);
@@ -482,7 +485,7 @@ float ribbonA(vec2 u, float pb, float px, out vec3 rc){
     float a = smoothstep(px,-px, l.y - top) * smoothstep(-px,px, l.y - bot) * inX;
     if(a > 0.0){
       float v = (l.y-bot)/max(top-bot,1e-3);
-      float sheen = pow(max(0.0, 1.0-abs(v-0.55)*2.2), 3.0)*smoothstep(0.05,0.3,x);
+      float sheen = pow(max(max(0.0, 1.0-abs(v-0.55)*2.2),0.0),3.0)*smoothstep(0.05,0.3,x);
       vec3 bc = vec3(0.015) + vec3(0.3,0.3,0.33)*sheen + vec3(0.05)*v;
       bc = mix(bc, vec3(0.75,0.76,0.8), smoothstep(0.08, 0.0, v)*smoothstep(0.1,0.25,x)*0.9);   // lining peeking at the lower rim
       rc = mix(rc, bc, a); ra = max(ra, a);
@@ -495,11 +498,11 @@ float ribbonA(vec2 u, float pb, float px, out vec3 rc){
     float a = smoothstep(px, -px, rr - petal);
     if(a > 0.0){
       float pk = 0.5 + 0.5*cos(an*5.0);
-      float sheen = pow(pk, 3.0)*smoothstep(0.02,0.1,rr)*smoothstep(petal, petal*0.6, rr);
+      float sheen = pow(max(pk,0.0),3.0)*smoothstep(0.02,0.1,rr)*smoothstep(petal, petal*0.6, rr);
       vec3 fc = vec3(0.02) + vec3(0.26,0.26,0.29)*sheen + vec3(0.03)*(1.0 - rr/petal);
       fc *= 1.0 - 0.6*smoothstep(0.85, 0.0, pk)*smoothstep(0.03, 0.09, rr);      // creases between petals
       float pearl = smoothstep(0.024+px, 0.024-px, rr);
-      vec3 pc = vec3(0.85,0.84,0.82) + vec3(0.25)*pow(max(0.0, 1.0 - length(r - vec2(-0.007,0.008))/0.016), 2.0);
+      vec3 pc = vec3(0.85,0.84,0.82) + vec3(0.25)*sq(max(0.0, 1.0 - length(r - vec2(-0.007,0.008))/0.016));
       fc = mix(fc, pc*(0.7+0.3*(1.0-rr/0.024)), pearl);
       rc = mix(rc, fc, a); ra = max(ra, a);
     }
@@ -525,9 +528,9 @@ vec3 room(vec2 v){
   float x=v.x, y=v.y;
   vec3 ceilc=vec3(0.93,0.93,0.96), mid=vec3(0.58,0.58,0.62), flo=vec3(0.74,0.68,0.63);
   vec3 c = y>0.0 ? mix(mid, ceilc, smoothstep(0.0,0.9,y)) : mix(mid, flo, smoothstep(0.0,-0.9,y));
-  c *= 1.0 - 0.6*pow(0.5+0.5*sin(x*4.3+1.0+0.6*sin(y*2.0)), 16.0);
-  c *= 1.0 - 0.45*pow(0.5+0.5*sin(x*9.7-2.0), 26.0)*smoothstep(0.35,-0.25,y);
-  c += 0.3*pow(0.5+0.5*sin(x*2.1+y*1.3), 30.0);
+  c *= 1.0 - 0.6*pow(max(0.5+0.5*sin(x*4.3+1.0+0.6*sin(y*2.0)),0.0),16.0);
+  c *= 1.0 - 0.45*pow(max(0.5+0.5*sin(x*9.7-2.0),0.0),26.0)*smoothstep(0.35,-0.25,y);
+  c += 0.3*pow(max(0.5+0.5*sin(x*2.1+y*1.3),0.0),30.0);
   vec2 d1=v-vec2(-0.35,0.9), d2=v-vec2(0.55,0.75);
   c += vec3(1.0,0.95,0.85)*(0.7*exp(-dot(d1,d1)*30.0) + 0.5*exp(-dot(d2,d2)*45.0));
   return c;
@@ -541,14 +544,14 @@ vec3 cam(vec2 v){
   if(uCamFront>0.5) sc = vec2(1.0);                                      // use the corners of the frame too
   vec2 uv = 0.5 + d*rr*0.5*sc; if(uCamFront>0.5) uv.x = 1.0-uv.x;
   vec3 c = texture(uCam, clamp(uv,0.002,0.998)).rgb;
-  return (pow(c, vec3(1.08))*1.08 + 0.03)*vec3(0.95,0.97,1.0);
+  return (pow(max(c,vec3(0.0)),vec3(1.08))*1.08 + 0.03)*vec3(0.95,0.97,1.0);
 }
 vec3 env(vec2 v){ return uCamMix>0.001 ? mix(room(v), cam(v), uCamMix) : room(v); }
 void main(){
   float m = min(uRes.x,uRes.y);
   vec2 P = (gl_FragCoord.xy - 0.5*uRes)/(0.5*m);
   vec3 full = texture(uC, vUv).rgb;
-  float sc = uPop*0.998;
+  float sc = uPop*0.998*0.84;                                         // smaller panel leaves room for the frame
   vec2 u = P/max(sc,1e-3);
   float px = 1.0/(0.5*m*max(sc,1e-3));
   // ---- dissolving: the solid starts to flow
@@ -564,11 +567,19 @@ void main(){
   const float rs = 0.42;
   vec3 col;
   vec3 bg = vec3(0.02,0.02,0.026)*(1.15-0.35*length(P));
+  { // 遺影: sumi-ink grey wall (#242424) with a broad soft grey light behind the frame
+    float fadeW = uRibOn*(1.0 - smoothstep(0.0, 0.3, uMelt));
+    vec2 gq = P/max(sc*1.18,1e-3);
+    float gd = length(max(abs(gq)-vec2(0.75),0.0));                        // distance from a rounded box behind the frame
+    vec3 wall = vec3(0.141) + vec3(0.2,0.2,0.21)*exp(-gd*gd*3.0)*0.9 + vec3(0.08)*exp(-gd*1.2);
+    wall *= 1.0 - 0.18*smoothstep(0.6, 1.6, length(P));                   // gentle falloff to the edges
+    bg = mix(bg, wall, fadeW);
+  }
   vec3 ringGlow = vid(normalize(u+1e-5)*0.9);
   if(sd > 0.0){
     float d = sd;
-    col = bg + ringGlow*0.05*exp(-d*14.0);                                   // light spilling around the voxel
-    col *= 1.0 - 0.6*exp(-d*60.0)*step(0.0,d);                                // contact shadow
+    col = bg + ringGlow*0.05*exp(-d*14.0)*(1.0-uRibOn);                       // light spilling around the voxel
+    col *= 1.0 - 0.6*exp(-d*60.0)*step(0.0,d)*(1.0-uRibOn);                   // contact shadow
   } else if(len < rs){
     col = vid(u/rs);
     col *= mix(1.0, 0.0, smoothstep(rs-0.018, rs-0.002, len));               // black lip of the hole
@@ -581,33 +592,33 @@ void main(){
     float inBowl = 1.0 - smoothstep(rb-0.07, rb+0.03, rhoB);
     const float NS = 16.0;
     float sa = ang/6.28318*NS; float seg = floor(sa), segf = fract(sa);
-    float trb = pow(tb,0.8)*3.0;
+    float trb = pow(max(tb,0.0),0.8)*3.0;
     float orow = floor((len-rb)/0.17);
     vec2 tid = vec2(mod(seg,NS), inBowl>0.5 ? 0.0 : 10.0);
     float h1 = mix(hash(tid),0.5,fu), h2 = mix(hash(tid+7.31),0.5,fu), h3 = mix(hash(tid+3.7),0.5,fu);
     vec2 wob = vec2(sin(uTime*0.9 + u.y*3.0 + h1*6.28), cos(uTime*0.7 + u.x*3.0 + h2*6.28))*(1.0+uPulse*2.5) + dir*uPulse*0.6;   // breathing membrane, throbbing with the heartbeat
     // flat front-facing panel: reflects the room in front of it, hardly any video
     vec2 tng = vec2(-dir.y, dir.x);
-    vec2 bulge = dir*pow(segf-0.5,2.0)*0.7 + tng*(segf-0.5)*0.3;            // each panel is slightly bent -> curved reflections
+    vec2 bulge = dir*sq(segf-0.5)*0.7 + tng*(segf-0.5)*0.3;            // each panel is slightly bent -> curved reflections
     vec3 flatC = env(P*0.85 + wob*0.035 + (vec2(h1,h2)-0.5)*0.22 + bulge);
     flatC += ringGlow*0.06*exp(-(rhoB-rb)*6.0);
     // bowl: inverted, squeezed room; the video only shows on the steep lip around the hole
     vec3 bowlRoom = env(-dir*(0.1+1.35*tb) + wob*0.02 + tng*(segf-0.5)*0.25 + (vec2(h1,h2)-0.5)*0.1);
     float tl = clamp((len-rs)/(rb-rs),0.,1.)/0.45;
-    float s = pow(clamp(tl,0.,1.),0.6)*3.0 + wob.x*0.08 + (h1-0.5)*0.06;
+    float s = pow(max(clamp(tl,0.,1.),0.0),0.6)*3.0 + wob.x*0.08 + (h1-0.5)*0.06;
     float k = floor(s), f = fract(s);
     float fold = mod(k,2.0) < 0.5 ? f : 1.0-f;
     float aa = ang + (h2-0.5)*0.05;
-    vec3 refl = vid(vec2(cos(aa),sin(aa))*(1.0-fold*0.9)) * pow(0.72, s);
+    vec3 refl = vid(vec2(cos(aa),sin(aa))*(1.0-fold*0.9)) * pow(max(0.72,0.0),s);
     float vidAmt = 1.0 - smoothstep(0.45, 1.0, tl);
     vec3 rim = vid(dir*0.96);
     vec3 bowlC = mix(bowlRoom, refl*1.15 + bowlRoom*0.15, vidAmt);
     bowlC += rim*exp(-tl*2.5)*0.5;
     bowlC *= 0.82 + 0.25*sin(tb*3.14159);
     col = mix(flatC, bowlC, inBowl);
-    col += vec3(0.0)*exp(-pow((rhoB-rb)/0.035,2.0));                    // soft highlight where bowl meets panel
+    col += vec3(0.0)*exp(-sq((rhoB-rb)/0.035));                    // soft highlight where bowl meets panel
     col *= 0.9 + 0.18*h3;
-    col += uCamMix*vec3(0.10)*pow(max(0.0, 1.0-abs(segf-0.5)*2.0), 6.0)*(1.0-inBowl);   // glossy sheen down the middle of each panel
+    col += uCamMix*vec3(0.10)*pow(max(max(0.0, 1.0-abs(segf-0.5)*2.0),0.0),6.0)*(1.0-inBowl);   // glossy sheen down the middle of each panel
     // seams: cut gaps between mirror panels - dark gap, bright bevel on one side, shadow on the other
     float side = segf < 0.5 ? 1.0 : -1.0;
     float dRad = min(segf,1.0-segf)*(6.28318/NS)*len;
@@ -619,9 +630,9 @@ void main(){
     float sideO = (len-rb)/0.17 > ob ? 1.0 : -1.0;
     float g = px*1.1;
     float gapR = 1.0-smoothstep(g*0.4, g, dRad);
-    float bevR = exp(-pow((dRad-g*1.8)/(g*0.9),2.0));
+    float bevR = exp(-sq((dRad-g*1.8)/(g*0.9)));
     float gapC = onRing*(1.0-smoothstep(g*0.4, g, dRow)) + onOut*(1.0-smoothstep(g*0.4, g, dOut));
-    float bevC = onRing*exp(-pow((dRow-g*1.8)/(g*0.9),2.0))*sideR + onOut*exp(-pow((dOut-g*1.8)/(g*0.9),2.0))*sideO;
+    float bevC = onRing*exp(-sq((dRow-g*1.8)/(g*0.9)))*sideR + onOut*exp(-sq((dOut-g*1.8)/(g*0.9)))*sideO;
     gapR*=1.0-fu; bevR*=1.0-fu; gapC*=1.0-fu; bevC*=1.0-fu;
     col += vec3(0.75)*bevR*max(side,0.0) + vec3(0.6)*max(bevC,0.0);
     col *= 1.0 - 0.45*bevR*max(-side,0.0) - 0.35*max(-bevC,0.0);
@@ -639,10 +650,10 @@ void main(){
     vec3 n2 = normalize(vec3(nxy, 1.0));
     vec3 Lm = normalize(vec3(-0.45,0.6,1.0)), Hm = normalize(Lm+vec3(0,0,1));
     vec3 rc = env(n2.xy*1.7 + P*0.25);
-    rc = pow(rc, vec3(1.9))*1.45;                                          // high contrast chrome
+    rc = pow(max(rc,vec3(0.0)),vec3(1.9))*1.45;                                          // high contrast chrome
     rc += vid(normalize(nxy+1e-4)*0.7)*0.18*smoothstep(0.2,0.8,length(nxy));   // a little of the colour reflected
-    float spec = pow(max(dot(n2,Hm),0.0), 90.0)*2.2 + pow(max(dot(n2,Hm),0.0), 12.0)*0.25;
-    float fr = pow(1.0-n2.z, 3.0);
+    float spec = pow(max(max(dot(n2,Hm),0.0),0.0),90.0)*2.2 + pow(max(max(dot(n2,Hm),0.0),0.0),12.0)*0.25;
+    float fr = pow(max(1.0-n2.z,0.0),3.0);
     vec3 chrome = rc*(0.75+0.5*fr) + vec3(1.0,0.98,0.95)*spec;
     chrome *= 1.0 - 0.55*smoothstep(-0.03,0.0,sd)*(1.0-step(0.0,sd));      // dark rim where the blob curves away
     col = mix(col, chrome, smoothstep(0.05,0.45,me));
@@ -666,9 +677,46 @@ void main(){
     float facetAmt = 1.0 - smoothstep(0.07, 0.65, front);
     col *= mix(1.0, 0.65+0.7*hash(mc+1.3), facetAmt);
     col += vec3(0.75,0.9,1.0)*(0.6*facetAmt*(1.0-smoothstep(0.0,0.06,md-0.33)));   // frosty grain edges
-    col += vec3(0.85,0.95,1.0)*exp(-pow(front/0.035,2.0))*1.3;                       // bright freezing front
+    col += vec3(0.85,0.95,1.0)*exp(-sq(front/0.035))*1.3;                       // bright freezing front
     vec3 cool = full*mix(1.0,0.8,cr) + vec3(0.04,0.07,0.12)*cr;
     col = mix(cool, col, solid);
+  }
+  // ---- 遺影の額: black lacquered moulding with a thin gold liner around the voxel
+  {
+    vec2 uo = P/max(sc,1e-3);
+    float fb = max(abs(uo.x), abs(uo.y));
+    const float LIN = 1.022, F = 1.18;
+    float fadeF = (1.0 - smoothstep(0.0, 0.3, uMelt));
+    if(fb > 1.0 && fadeF > 0.0){
+      vec3 fc; float fa = 1.0;
+      bool vert = abs(uo.x) > abs(uo.y);
+      float sideL = vert ? (uo.x < 0.0 ? 0.85 : 0.35) : (uo.y > 0.0 ? 1.0 : 0.25);   // light from the upper left
+      if(fb < LIN){                                                        // silver liner
+        float t = (fb-1.0)/(LIN-1.0);
+        fc = vec3(0.62,0.64,0.68)*(0.55 + 0.6*sideL) + vec3(0.45,0.46,0.5)*pow(max(0.0,1.0-abs(t-0.4)*2.5),3.0);   // silver liner
+        fc *= 1.0 - 0.5*smoothstep(0.75,1.0,t);
+      } else if(fb < F){                                                    // black moulding with a bead and a stepped profile
+        float t = (fb-LIN)/(F-LIN);
+        float h = 0.0;
+        h += 0.55*exp(-sq((t-0.12)/0.05));                                  // inner bead
+        h += 0.25*smoothstep(0.2,0.55,t)*(1.0-smoothstep(0.55,0.95,t));     // broad sloped face
+        h += 0.7*exp(-sq((t-0.93)/0.035));                                  // outer rounded edge
+        float rimHi = exp(-sq((t-0.985)/0.008));                             // very fine highlight on the outer edge
+        float groove = exp(-sq((t-0.2)/0.025));
+        fc = vec3(0.018,0.018,0.02) + vec3(0.4,0.4,0.42)*h*sideL;
+        fc += vec3(0.55,0.56,0.6)*pow(max(h-0.3,0.0)/0.4, 3.0)*sideL*0.6;     // a little more gloss on the raised parts
+        fc *= 1.0 - 0.35*(1.0-sideL)*smoothstep(0.3,0.9,t);                  // the shaded sides fall off more → depth
+        fc += vec3(0.06)*sideL*(0.5+0.5*sin(t*40.0+uo.x*3.0+uo.y*3.0))*0.15;  // faint lacquer streaks
+        fc *= 1.0 - 0.6*groove;
+        fc += vec3(0.75,0.76,0.78)*rimHi*(0.45+0.55*sideL);
+        float mitre = 1.0 - smoothstep(px*0.6, px*1.8, abs(abs(uo.x)-abs(uo.y))*0.7);   // the mitred corners
+        fc = mix(fc, vec3(0.0), mitre*0.6);
+      } else {                                                              // soft shadow of the frame on the background
+        fc = col; fa = 0.0;
+        col *= 1.0 - 0.35*exp(-(fb-F)*22.0)*fadeF;
+      }
+      col = mix(col, fc, fa*fadeF*smoothstep(F+px*1.5, F-px*0.5, fb));
+    }
   }
   // ---- 遺影リボン (test): like a memorial portrait frame — a black rosette bow at the top, two wide sashes down to the sides
   if(uRibOn > 0.001){
@@ -688,7 +736,7 @@ void main(){
     if(uFfC.w < 0.7 && uFfD > 0.0){                                         // ピシャ: a splash where it lands
       float a = uFfC.w, dd = length(Ps - uFfC.yz), base = max(uFfA.w,0.02);
       float rr = base*(0.25 + a*1.6), rr2 = base*(0.15 + a*1.0);
-      float ring = exp(-pow((dd-rr)/(base*0.05),2.0)) + 0.6*exp(-pow((dd-rr2)/(base*0.04),2.0));
+      float ring = exp(-sq((dd-rr)/(base*0.05))) + 0.6*exp(-sq((dd-rr2)/(base*0.04)));
       float flash = exp(-dd*dd/(base*base*0.12))*max(0.0,1.0-a*6.0);
       float drops = 0.0;
       for(int k=0;k<7;k++){ float an=float(k)*0.8976+uFfC.y*13.0; vec2 dp=uFfC.yz+vec2(cos(an),sin(an))*base*(0.3+a*2.2) + vec2(0.0, -a*a*base*1.5);
@@ -701,12 +749,12 @@ void main(){
       vec3 R = reflect(vec3(0.0,0.0,-1.0), n);
       vec3 envR = room(R.xy*1.5 + Ps*0.4);
       vec3 envL = vid(clamp(Ps*2.2 + R.xy*0.6, vec2(-1.0), vec2(1.0)));
-      float fres = 0.8 + 0.5*pow(1.0 - n.z, 2.0);
-      vec3 silver = mix(envR, envL, 0.28 + 0.3*pow(1.0-n.z,1.5)) * fres * vec3(0.93,0.96,1.0);
+      float fres = 0.8 + 0.5*sq(1.0 - n.z);
+      vec3 silver = mix(envR, envL, 0.28 + 0.3*pow(max(1.0-n.z,0.0),1.5)) * fres * vec3(0.93,0.96,1.0);
       silver *= mix(0.4, 1.0, smoothstep(0.12, 0.6, n.z));                 // darker rim where the round body turns away
       silver *= 0.6 + 0.55*tone;                                             // folds of the sculpture stay a little darker
-      float sp1 = pow(max(0.0, dot(n, normalize(vec3(-0.35,0.55,1.0)))), 60.0);
-      float sp2 = pow(max(0.0, dot(n, normalize(vec3(0.6,-0.2,1.0)))), 25.0);
+      float sp1 = pow(max(max(0.0, dot(n, normalize(vec3(-0.35,0.55,1.0)))),0.0),60.0);
+      float sp2 = pow(max(max(0.0, dot(n, normalize(vec3(0.6,-0.2,1.0)))),0.0),25.0);
       silver += vec3(1.0)*sp1*1.3 + vec3(0.8,0.85,0.9)*sp2*0.35;
       outc = mix(outc, silver, fa);
     }
@@ -1079,7 +1127,7 @@ setMirUI();
 function layoutMark(){
   const mk=$("mark"); mk.style.fontSize="10px"; mk.style.right=""; mk.classList.remove("away");
   if(!voxOn) return;
-  const W=innerWidth, H=innerHeight, side=Math.min(W,H)*0.998;
+  const W=innerWidth, H=innerHeight, side=Math.min(W,H)*0.998*1.0;
   const r=mk.getBoundingClientRect(), dk=$("dock").getBoundingClientRect();
   const top0=r.top, right0=W-r.right;
   let k=1;
@@ -1119,7 +1167,7 @@ function toP(e){ const r=cv.getBoundingClientRect(); const a=r.width/r.height;
 let lastP=null;
 // screen point → liquid coordinates (inside the voxel window the liquid is magnified)
 function toFluid(e){ const r=cv.getBoundingClientRect(); const dx=e.clientX-r.left-r.width/2, dy=r.height/2-(e.clientY-r.top);
-  if(voxOn && voxAmt>0.5){ const k=1/(0.998*0.42*r.height); return [dx*k, dy*k]; }
+  if(voxOn && voxAmt>0.5){ const k=1/(0.998*0.84*0.42*r.height); return [dx*k, dy*k]; }
   return [dx/r.height, dy/r.height]; }
 const grab={on:false, px:0, py:0, vx:0, vy:0, t:0, hist:[]};
 cv.addEventListener("pointerdown",e=>{
@@ -1146,7 +1194,7 @@ const up=()=>{ touch.active=false;
     const outside = Math.hypot(fish.x/RX, fish.y/RY) > 0.9;
     if(sp > 0.35 || outside){ let vx=grab.vx, vy=grab.vy;
       if(sp < 0.35){ const d=Math.hypot(fish.x,fish.y)||1; vx=fish.x/d*0.8; vy=fish.y/d*0.8; }   // dragged to the edge and let go: it slips out
-      const sc = (voxOn && voxAmt>0.5) ? 0.998*0.42 : 1;                    // liquid → screen scale at the moment of the throw
+      const sc = (voxOn && voxAmt>0.5) ? 0.998*0.84*0.42 : 1;                    // liquid → screen scale at the moment of the throw
       fish.thrown=true; fish.crossed=false; fish.fsc=sc; fish.rx=RX; fish.ry=RY;
       fish.fsx=fish.x*sc; fish.fsy=fish.y*sc; fish.th=Math.atan2(vy,vx); fish.tt=0; fish.front=0; fish.hops=0; fish.spa=9; fish.spk=0; fish.lift=0;
       const d=Math.hypot(vx,vy)||1; fish.fdx=vx/d; fish.fdy=vy/d; fish.f0x=fish.fsx; fish.f0y=fish.fsy;
