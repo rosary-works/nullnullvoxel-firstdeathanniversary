@@ -468,7 +468,7 @@ float ribbonA(vec2 u, float pb, float px, out vec3 rc){
     float wdt = (0.135 + 0.01*along)*0.75;                                 // gets a little wider as it falls (75% width)
     float wv = 0.006*sin(along*5.0 + uTime*0.8 + float(side));
     float t = (across - wv)/wdt;
-    float a = smoothstep(px, -px, abs(across-wv) - wdt) * smoothstep(-px, px, along) * smoothstep(-px, px, q.x + 1.21);   // end cut straight down, flush with the frame's outer side
+    float a = smoothstep(px, -px, abs(across-wv) - wdt) * smoothstep(-px, px, along) * smoothstep(-px, px, q.x + 1.14);   // end cut straight down, lying on the side of the frame
     if(a > 0.0){
       float lining = smoothstep(0.8, 0.88, t);                            // the grey-white underside shows along the lower edge
       float sheen = pow(max(max(0.0, 1.0 - abs(t*0.9 - 0.3 - 0.15*sin(along*3.0+uTime*0.6))),0.0),4.0);
@@ -1180,7 +1180,7 @@ cv.addEventListener("pointerdown",e=>{
   if(fish.on && !fish.thrown){ const f=toFluid(e), L=fish.L||0.1;
     if(Math.hypot(f[0]-fish.x, f[1]-fish.y) < L*1.4){ grab.on=true; grab.px=f[0]; grab.py=f[1]; grab.vx=0; grab.vy=0; grab.t=performance.now(); grab.hist=[[grab.t,f[0],f[1]]];
       fish.held=true; cv.setPointerCapture(e.pointerId); return; } }
-  if(document.body.classList.contains("immersive")) return; const p=toP(e); touch.x=p[0]; touch.y=p[1]; touch.active=true; lastP=p; cv.setPointerCapture(e.pointerId); });
+  const p=toP(e);                                                   touch.x=p[0]; touch.y=p[1]; touch.active=true; lastP=p; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener("pointermove",e=>{
   if(grab.on){ const f=toFluid(e), now=performance.now();
     grab.hist.push([now,f[0],f[1]]); while(grab.hist.length>2 && now-grab.hist[0][0]>110) grab.hist.shift();
