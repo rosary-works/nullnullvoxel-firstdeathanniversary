@@ -126,6 +126,7 @@
   <button class="ib" id="bMir"><svg viewBox="0 0 24 24"><path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16"/><path d="M6.3 12c1.5-2.4 3.4-3.6 5.7-3.6s4.2 1.2 5.7 3.6c-1.5 2.4-3.4 3.6-5.7 3.6S7.8 14.4 6.3 12z"/><circle cx="12" cy="12" r="1.7"/></svg><span>投影</span></button>
   <button class="ib" id="bImm"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>全画面</span></button>
   <button class="ib" id="bSnd"><svg class="emo" viewBox="0 0 24 24"><path d="M12 20.3s-7.4-4.5-8.8-9.4C2.3 7.6 4.4 4.6 7.5 4.6c2 0 3.5 1.1 4.5 2.6 1-1.5 2.5-2.6 4.5-2.6 3.1 0 5.2 3 4.3 6.3-1.4 4.9-8.8 9.4-8.8 9.4z"/><path d="M3.4 11.6h5l1.4-2.4 2.2 5.2 1.6-3.6.8.8h6.2"/></svg><span>鼓動</span></button>
+  <button class="ib on" id="bRib"><svg viewBox="0 0 24 24"><path d="M12 9.5c-2-2.6-5.6-4.3-7.6-3.3-1.3.7-1.2 3.9.2 5.1 1.6 1.3 5.1.1 7.4-1.8z"/><path d="M12 9.5c2-2.6 5.6-4.3 7.6-3.3 1.3.7 1.2 3.9-.2 5.1-1.6 1.3-5.1.1-7.4-1.8z"/><circle cx="12" cy="9.8" r="1.6"/><path d="M11 11.2L7 20l2.4-1 1.4 2.2L12.3 11M13 11.2l4 8.8-2.4-1-1.4 2.2-1.5-10.2"/></svg><span>リボン</span></button>
   <div class="sep"></div>
   <button class="ib rec" id="bRec"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6" stroke-width="2"/><circle class="core" cx="12" cy="12" r="5.2" fill="currentColor" stroke="none"/></svg><span>記録</span></button>
   <button class="ib" id="bSet"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>調整</span></button>
@@ -427,7 +428,7 @@ const FS_V = `#version 300 es
 precision highp float;
 float sq(float x){ return x*x; }
 in vec2 vUv; out vec4 o;
-uniform sampler2D uC; uniform vec2 uRes; uniform float uAmt, uTime, uPop, uPulse; uniform float uRib, uRibOn;
+uniform sampler2D uC; uniform vec2 uRes; uniform float uAmt, uTime, uPop, uPulse; uniform float uRib, uRibOn, uMem;
 uniform sampler2D uCam; uniform float uCamMix, uCamAsp, uMelt, uCryst, uCamFront;
 uniform sampler2D uAyu;
 uniform vec4 uFfA; uniform vec4 uFfB; uniform vec4 uFfC; uniform float uFfD;   // C: shadow lift, splash x, y, age | D: splash strength          // the fish thrown out in front of the mirror: x, y (screen), heading, length | phase, amp, alpha, bend
@@ -468,7 +469,7 @@ float ribbonA(vec2 u, float pb, float px, out vec3 rc){
     float wdt = (0.135 + 0.01*along)*0.75;                                 // gets a little wider as it falls (75% width)
     float wv = 0.006*sin(along*5.0 + uTime*0.8 + float(side));
     float t = (across - wv)/wdt;
-    float a = smoothstep(px, -px, abs(across-wv) - wdt) * smoothstep(-px, px, along) * smoothstep(-px, px, q.x + 1.14);   // end cut straight down, lying on the side of the frame
+    float a = smoothstep(px, -px, abs(across-wv) - wdt) * smoothstep(-px, px, along) * smoothstep(1.18+px*1.5, 1.18-px*0.5, -q.x);   // ends exactly where the frame ends   // end cut straight down, lying on the side of the frame
     if(a > 0.0){
       float lining = smoothstep(0.8, 0.88, t);                            // the grey-white underside shows along the lower edge
       float sheen = pow(max(max(0.0, 1.0 - abs(t*0.9 - 0.3 - 0.15*sin(along*3.0+uTime*0.6))),0.0),4.0);
@@ -554,7 +555,7 @@ void main(){
   float m = min(uRes.x,uRes.y);
   vec2 P = (gl_FragCoord.xy - 0.5*uRes)/(0.5*m);
   vec3 full = texture(uC, vUv).rgb;
-  float sc = uPop*0.998*0.84;                                         // smaller panel leaves room for the frame
+  float sc = uPop*0.998*mix(1.0, 0.84, uMem);                                         // smaller panel leaves room for the frame
   vec2 u = P/max(sc,1e-3);
   float px = 1.0/(0.5*m*max(sc,1e-3));
   // ---- dissolving: the solid starts to flow
@@ -691,7 +692,7 @@ void main(){
     vec2 uo = P/max(sc,1e-3);
     float fb = max(abs(uo.x), abs(uo.y));
     const float LIN = 1.022, F = 1.18;
-    float fadeF = (1.0 - smoothstep(0.0, 0.3, uMelt));
+    float fadeF = (1.0 - smoothstep(0.0, 0.3, uMelt))*uRibOn;
     if(fb > 1.0 && fadeF > 0.0){
       vec3 fc; float fa = 1.0;
       bool vert = abs(uo.x) > abs(uo.y);
@@ -728,6 +729,7 @@ void main(){
     float ribA = uRibOn*(1.0 - smoothstep(0.0, 0.25, uMelt));
     vec3 rc; float ra = ribbonA(u, uRib, px, rc);
     vec3 dummy; float rs = ribbonA(u + vec2(-0.025, 0.035), uRib, px, dummy);   // its soft shadow on the frame
+    rs *= smoothstep(1.18+px, 1.18-px, max(abs(u.x),abs(u.y)));           // shadow only falls on the frame, never past it
     col *= 1.0 - 0.45*rs*ribA*(1.0-ra);
     col = mix(col, rc, ra*ribA);
   }
@@ -1149,6 +1151,9 @@ function layoutMark(){
   if(k<0.6) mk.classList.add("away"); else mk.style.fontSize=(10*k).toFixed(2)+"px";
 }
 addEventListener("resize", layoutMark); setTimeout(layoutMark, 50);
+// 遺影 (frame + ribbon) on/off — on when the app starts
+let memOn=true, memAmt=1;
+$("bRib").onclick=()=>{ memOn=!memOn; $("bRib").classList.toggle("on",memOn); };
 let voxTaps=0, voxTapT=0;
 $("bVox").onclick=()=>{
   const now=performance.now(); if(now-voxTapT>1200) voxTaps=0; voxTapT=now; voxTaps++;
@@ -1173,7 +1178,7 @@ function toP(e){ const r=cv.getBoundingClientRect(); const a=r.width/r.height;
 let lastP=null;
 // screen point → liquid coordinates (inside the voxel window the liquid is magnified)
 function toFluid(e){ const r=cv.getBoundingClientRect(); const dx=e.clientX-r.left-r.width/2, dy=r.height/2-(e.clientY-r.top);
-  if(voxOn && voxAmt>0.5){ const k=1/(0.998*0.84*0.42*r.height); return [dx*k, dy*k]; }
+  if(voxOn && voxAmt>0.5){ const k=1/(0.998*(1-0.16*memAmt)*0.42*r.height); return [dx*k, dy*k]; }
   return [dx/r.height, dy/r.height]; }
 const grab={on:false, px:0, py:0, vx:0, vy:0, t:0, hist:[]};
 cv.addEventListener("pointerdown",e=>{
@@ -1200,7 +1205,7 @@ const up=()=>{ touch.active=false;
     const outside = Math.hypot(fish.x/RX, fish.y/RY) > 0.9;
     if(sp > 0.35 || outside){ let vx=grab.vx, vy=grab.vy;
       if(sp < 0.35){ const d=Math.hypot(fish.x,fish.y)||1; vx=fish.x/d*0.8; vy=fish.y/d*0.8; }   // dragged to the edge and let go: it slips out
-      const sc = (voxOn && voxAmt>0.5) ? 0.998*0.84*0.42 : 1;                    // liquid → screen scale at the moment of the throw
+      const sc = (voxOn && voxAmt>0.5) ? 0.998*(1-0.16*memAmt)*0.42 : 1;                    // liquid → screen scale at the moment of the throw
       fish.thrown=true; fish.crossed=false; fish.fsc=sc; fish.rx=RX; fish.ry=RY;
       fish.fsx=fish.x*sc; fish.fsy=fish.y*sc; fish.th=Math.atan2(vy,vx); fish.tt=0; fish.front=0; fish.hops=0; fish.spa=9; fish.spk=0; fish.lift=0;
       const d=Math.hypot(vx,vy)||1; fish.fdx=vx/d; fish.fdy=vy/d; fish.f0x=fish.fsx; fish.f0y=fish.fsy;
@@ -1421,7 +1426,7 @@ function frame(now){
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,cTex); gl.uniform1i(v.uC,0);
     gl.uniform2f(v.uRes,cv.width,cv.height); gl.uniform1f(v.uAmt, voxOn ? voxAmt : (voxAmt>0.0001 ? 1 : 0)); gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, ayuTex); gl.uniform1i(v.uAyu, 3); gl.activeTexture(gl.TEXTURE0); gl.uniform4f(v.uFfA, fish.fsx||0, fish.fsy||0, fish.th, (fish.fL||0)*1.15); gl.uniform4f(v.uFfB, fish.ph, fish.amp, fish.front||0, fish.bend); gl.uniform4f(v.uFfC, fish.lift||0, fish.spx||0, fish.spy||0, fish.spa??9); gl.uniform1f(v.uFfD, fish.thrown ? (fish.spk||0) : 0); gl.uniform1f(v.uCryst,crystP); gl.uniform1f(v.uMelt,meltP); gl.uniform1f(v.uTime,wallT); gl.uniform1f(v.uPop,Math.max(0.02,pop)); const pl=snd.pulse(); gl.uniform1f(v.uPulse, pl);
     const rp = pl;                                                       // the ribbon only sways with the heartbeat sound
-    gl.uniform1f(v.uRib, rp); gl.uniform1f(v.uRibOn, voxOn ? Math.min(1,voxAmt*1.5) : 1); heartEmo.classList.toggle("beat", pl>0.25);
+    gl.uniform1f(v.uRib, rp); memAmt += ((memOn?1:0)-memAmt)*Math.min(1,dt*3); gl.uniform1f(v.uMem, memAmt); gl.uniform1f(v.uRibOn, (voxOn ? Math.min(1,voxAmt*1.5) : 1)*memAmt); heartEmo.classList.toggle("beat", pl>0.25);
     gl.drawArrays(gl.TRIANGLES,0,3);
   }
 }
